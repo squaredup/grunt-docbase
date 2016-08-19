@@ -1,5 +1,5 @@
 /*
- * grunt-docbase
+ * grunt-squaredup-docbase
  * https://github.com/mateus/DocbaseGrunt
  *
  * Copyright (c) 2015 Mateus Freira
@@ -13,7 +13,7 @@ module.exports = function(grunt) {
   // Please see the Grunt documentation for more information regarding task
   // creation: http://gruntjs.com/creating-tasks
 
-  grunt.registerMultiTask('docbase', 'Grunt plugin to generate html files from your docbase project.', function() {
+  grunt.registerMultiTask('squaredup-docbase', 'Grunt plugin to generate html files from your docbase project.', function() {
     var ProgressBar = require('progress');
     var done = this.async();
     var options = this.options({
@@ -433,42 +433,6 @@ module.exports = function(grunt) {
       });
     };
 
-    var getGitMap = function(url) {
-      phantom.create(function(ph) {
-        ph.createPage(function(page) {
-          page.set('settings.userAgent', 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/37.0.2062.120 Safari/537.36');
-          page.open(url, function() {
-            readGitMap(page);
-          });
-        });
-      }, {
-        parameters: {
-          'ignore-ssl-errors': 'yes',
-          'ssl-protocol': 'tlsv1',
-          'web-security': false,
-          'debug': options.enableCrawlerDebug.toString()
-        }
-      });
-    }
-
-    function readGitMap(page) {
-      setTimeout(function() {
-        util.getGitMap(page, options.linksSelector, function(map_data) {
-          if (map_data == "") {
-            grunt.log.writeln('waiting for github response');
-            readGitMap(page);
-          } else {
-            configData.versions = map_data;
-            var docbaseConfigWrite = "var docbaseConfig = " + JSON.stringify(configData, null, 2) + ";";
-            grunt.file.write(options.configJsFile, docbaseConfigWrite, 'w');
-            mapFile = configData.versions;
-            versionsLink = util.versionLinks(mapFile);
-            getPageLinks(page, options.linksSelector, makeGitCrawler(false, false));
-          }
-        });
-      }, 500);
-    }
-
     if (configData.publish === 'local') {
       check_bower();
     }
@@ -492,12 +456,8 @@ module.exports = function(grunt) {
     }
 
     function initialize() {
-      var manual_override = configData.hasOwnProperty('manual_override') ? configData.manual_override : false;
-      if (configData.method == 'github' && !manual_override) {
-        getGitMap(options.urlToAccess + 'getGitMap.html');
-      } else {
-        crawlPage(options.urlToAccess, true);
-      }
+		var manual_override = configData.hasOwnProperty('manual_override') ? configData.manual_override : false;
+		crawlPage(options.urlToAccess, true);
     }
 
     function serveStaticBuild() {

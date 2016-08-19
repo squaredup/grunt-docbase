@@ -1,19 +1,16 @@
 {
-  "name": "grunt-docbase",
+  "name": "grunt-squaredup-docbase",
   "description": "Static HTML generator plugin.",
-  "version": "0.1.43",
-  "homepage": "https://github.com/appbaseio/grunt-docbase",
+  "version": "1.0.0",
+  "homepage": "https://github.com/squaredup/grunt-docbase",
   "author": {
-    "name": "Mateus Freira",
-    "email": "mateus.freira@gmail.com",
-    "url": "https://github.com/mateusfreira"
+    "name": "Squared Up",
+    "email": "hello@squaredup.com",
+    "url": "https://github.com/squaredup/grunt-docbase"
   },
   "repository": {
     "type": "git",
-    "url": "git@github.com:appbaseio/grunt-docbase.git"
-  },
-  "bugs": {
-    "url": "https://github.com/appbaseio/grunt-docbase/issues"
+    "url": "git@github.com:squaredup/grunt-docbase.git"
   },
   "licenses": [
     {
