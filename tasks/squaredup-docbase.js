@@ -303,7 +303,7 @@ module.exports = function(grunt) {
     }
     var generateSearchIndex = function(page, url, ph, buildIndex, callback) {
       page.evaluate(function(selector, url) {
-        var HEADER = ['H2', 'H1', 'H3'];
+        var HEADER = ['H2', 'H1', 'H3', 'YAML'];
         var elements = Array.prototype.slice.call(document.querySelectorAll(selector));
         var h2s = elements.filter(function(element) {
           return HEADER.indexOf(element.tagName) !== -1;
