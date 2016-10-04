@@ -37,9 +37,10 @@ module.exports = function(grunt) {
       searchIndexSelector: "h1, h2, h3, p, ul",
       operation: 'series'
     });
-    grunt.log.writeln("starting ");
+    grunt.log.writeln("Starting...");
     var util = require("./lib/util.js");
     var fs = require("fs");
+	var lunr = require("lunr");
     var termsToBaseURLReplace = ['src="', 'href="', "src=", "href="];
     var baseReplace = ['base href="'];
     var urlToFielName = util.urlToFielName;
@@ -75,7 +76,15 @@ module.exports = function(grunt) {
     var pages = [];
     var links = [];
     var crawled = {};
-    var searchIndex = [];
+	
+    var searchIndex = lunr(function () {
+	  this.ref('link');
+	  this.field('title', { boost: 35 });
+	  this.field('content');
+	  this.field('keywords', { boost: 50 });
+	});
+	var searchStore = {};
+	
     var indexdLinks = [];
     var clearFolder = function(srcpath) {
       if (grunt.file.isDir(srcpath)) {
@@ -90,7 +99,7 @@ module.exports = function(grunt) {
         var files = grunt.file.expand(srcpath + "/*");
         files.forEach(moveAssets);
         if (srcpath.indexOf(options.generatePath) === -1 && srcpath !== './index.html' && srcpath !== './search-index.json' && srcpath.indexOf('node_modules') === -1) {
-          grunt.log.writeln("Moving:", srcpath);
+          grunt.log.writeln("Moving: ", srcpath);
         }
       } else {
         if (srcpath.indexOf(options.generatePath) === -1 && srcpath !== './index.html' && srcpath !== './search-index.json' && srcpath.indexOf('node_modules') === -1) {
@@ -108,7 +117,7 @@ module.exports = function(grunt) {
       pages.shift();
       if (pages.length === 0) {
         if (!options.onlysearchIndex) {
-          prepareAssets();
+			prepareAssets();			
         }
         setTimeout(function() {
           ph.exit();
@@ -199,16 +208,25 @@ module.exports = function(grunt) {
         });
       };
     };
-    var chainEnd = function(ph) {
-      prepareAssets();
-      setTimeout(function() {
-        ph.exit();
-        if (configData.publish === 'local') {
-          serveStaticBuild();
-        } else {
-          done();
-        }
-      }, 0);
+    var chainEnd = function(ph) {	
+		
+		//save search index
+		var path = options.generateHtml ? options.generatePath : '';       
+		grunt.file.write(path + "search-index.json", JSON.stringify({
+			index: searchIndex,
+			store: searchStore
+		}), 'w');
+		grunt.log.writeln('Saved search index!');			
+			
+		prepareAssets();
+		setTimeout(function() {
+			ph.exit();
+			if (configData.publish === 'local') {
+			  serveStaticBuild();
+			} else {
+			  done();
+			}
+		}, 0);
     }
     var crawlChain = function(findLinks, once, ph) {
       if (!progressStart) {
@@ -248,7 +266,7 @@ module.exports = function(grunt) {
               //if (linkKey == templLinks.length - 1) {
               crawlPage(options.urlToAccess + link, findLinks, versionFlag, function(ph, url, page) {
                 pageInfo.pageCounter++;
-                console.log(pageInfo.pageCounter, 'Done : ' + urlToFielName(url));
+                console.log('Done : ' + urlToFielName(url));
                 if (pageInfo.pageCounter == (pageInfo.currentPage + 1) * pageInfo.pageSize) {
                   pageInfo.currentPage++;
                   crawlChain(findLinks, once, ph);
@@ -302,53 +320,52 @@ module.exports = function(grunt) {
       }
     }
     var generateSearchIndex = function(page, url, ph, buildIndex, callback) {
-      page.evaluate(function(selector, url) {
-        var HEADER = ['H2', 'H1', 'H3', 'YAML'];
-        var elements = Array.prototype.slice.call(document.querySelectorAll(selector));
-        var h2s = elements.filter(function(element) {
-          return HEADER.indexOf(element.tagName) !== -1;
-        });
-        return h2s.map(function(element, index) {
-          var h2Index = elements.indexOf(element);
-          var nextH2 = h2s[index + 1];
-          var nextH2Index = !!nextH2 ? elements.indexOf(nextH2) : elements.length;
-          var elementsBetween = elements.slice(h2Index, nextH2Index);
-          var path = url.substr(url.indexOf('#'));
-          var spaLink = url.substr(url.indexOf('#'));
-          var link = element.id ? path + "/#" + element.id : path;
-
-          return {
-            link: link,
-            spaLink: spaLink,
-            title: element.innerText,
-            content: elementsBetween.reduce(function(text, current) {
-              return text += current.outerHTML;
-            }, "")
-          }
-        });
-      }, function(elements) {
-        var missingLinks = elements.filter(function(element) {
-          var has = !!indexdLinks[element.link];
-          if (!has) {
-            indexdLinks[element.link] = true;
-          }
-          return !has;
-        });
-        searchIndex = searchIndex.concat(missingLinks.map(function(link) {
-          link.link = options.generateHtml ? urlToFielName(link.link) : link.link;
-          return link;
-        }));
-        if (buildIndex) {
-          if (progressStart) {
-            grunt.log.writeln("Creating index for: " + url);
-          }
-          grunt.file.write("search-index.json", JSON.stringify(searchIndex), 'w');
-          setTimeout(function() {
-            if (callback) {
-              callback(ph, url);
-            }
-          });
-        }
+      page.evaluate(function(selector, url) { //execute function in context of a page
+	  
+		var content = document.body.innerText; //get all content
+		var title = document.querySelector('h1').innerText;
+		var tokenizedKeywords = [];
+		var yaml = document.querySelector('yaml');
+		var path = url.substr(url.indexOf('#'));	
+		
+		//extract & tokenize keywords from yaml
+		if(yaml && yaml.innerHTML) {
+			var yamlLines = yaml.innerHTML.trim().split("\n"); // split yaml entries
+			for(var x = 0; x < yamlLines.length; x++) {
+				if(yamlLines[x].trim().substr(0, 8) === "keywords") { //find keywords entry
+					var keywords = yamlLines[x].split(":"); //split on key/value separator		
+					if(keywords && keywords.length > 1) { //if has value
+						keywords = keywords[1].trim(); //trim whitespace
+						tokenizedKeywords = keywords.split(" ");	//tokenize				
+					}
+				}
+			}
+		}	
+				
+		var item = {
+			link: path,
+			title: title,
+			content: content,
+			keywords: tokenizedKeywords
+		};
+		return item;
+		
+      }, function(item) { // process indexed elements   		
+		if(item && item.link) {
+			item.link = options.generateHtml ? urlToFielName(item.link) : item.link;
+		}
+		searchStore[item.link] = { //store a ref to some key details like the title (keyed by the link)
+			title: item.title
+		};
+		
+		searchIndex.add(item); //index the item
+		
+		setTimeout(function() {
+			if (callback) {
+				callback(ph, url);
+			}
+		});
+		
       }, options.searchIndexSelector, url);
     };
     var generatePage = function(page, url, ph, callback) {
@@ -359,9 +376,7 @@ module.exports = function(grunt) {
         var fileName = urlToFielName(url);
         documentContent = replaceBaseUrl(replacePageLinks(documentContent), fileName);
         if (options.generateHtml)
-          grunt.file.write(options.generatePath + fileName, options.startDocument + documentContent + options.endDocument, 'w');
-        var path = options.generateHtml ? options.generatePath : '';
-        grunt.file.write(path + "search-index.json", JSON.stringify(searchIndex), 'w');
+          grunt.file.write(options.generatePath + fileName, options.startDocument + documentContent + options.endDocument, 'w');       
         if (progressStart) {
           grunt.log.writeln("Generating:", options.generatePath + urlToFielName(url));
         }
@@ -418,7 +433,7 @@ module.exports = function(grunt) {
 
               },
               error: function(e) {
-                  grunt.log.writeln("Erro generating page:", options.generatePath + urlToFielName(url));
+                  grunt.log.writeln("Error generating page:", options.generatePath + urlToFielName(url));
                 } // optional
             }, page);
           });
@@ -457,7 +472,7 @@ module.exports = function(grunt) {
 
     function initialize() {
 		var manual_override = configData.hasOwnProperty('manual_override') ? configData.manual_override : false;
-		crawlPage(options.urlToAccess, true);
+		crawlPage(options.urlToAccess, true);	
     }
 
     function serveStaticBuild() {
